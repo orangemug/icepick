@@ -326,6 +326,59 @@ function merge (target, source, resolver) {
   }, target)
 }
 
+exports.replace = replace;
+function replace (target, source, resolver) {
+  if (target == null || source == null) {
+    return target
+  }
+
+  const targetKeys = Object.keys(target);
+  const sourceKeys = Object.keys(source);
+
+  if (!targetKeys.every(k => sourceKeys.indexOf(k) > -1)) {
+    const newTarget = {};
+    sourceKeys.forEach((key) => {
+      if(source.hasOwnProperty(key)) {
+        newTarget[key] = target[key];
+      }
+    });
+    target = newTarget;
+  }
+
+  return Object.keys(source).reduce((obj, key) => {
+    const sourceVal = source[key]
+    const targetVal = obj[key]
+
+    const resolvedSourceVal =
+      resolver ? resolver(targetVal, sourceVal, key) : sourceVal
+
+    if (weCareAbout(sourceVal) && weCareAbout(targetVal)) {
+      // if they are both frozen and reference equal, assume they are deep equal
+      if (
+        resolvedSourceVal === targetVal &&
+        (
+          process.env.NODE_ENV === 'production' ||
+          (
+            Object.isFrozen(resolvedSourceVal) &&
+            Object.isFrozen(targetVal)
+          )
+        )
+      ) {
+        return obj
+      }
+      if (Array.isArray(sourceVal)) {
+        return i.assoc(obj, key, resolvedSourceVal)
+      }
+      // recursively merge pairs of objects
+      return assocIfDifferent(obj, key,
+        replace(targetVal, resolvedSourceVal, resolver))
+    }
+
+    // primitive values, stuff with prototypes
+    return assocIfDifferent(obj, key, resolvedSourceVal)
+  }, target)
+}
+
 function assocIfDifferent (target, key, value) {
   if (target[key] === value) {
     return target
